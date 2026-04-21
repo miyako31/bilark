@@ -1,5 +1,6 @@
 """CLI for bilark - Bilibili archiving made simple"""
 
+import os
 from pathlib import Path
 from colorama import Style, Fore
 import sys
@@ -14,16 +15,24 @@ HELP = """bilark [options]
   Bilibili archiving made simple.
 
 Options:
-  new [name] [url/uid]     Creates new archive with name and channel url or UID
-  refresh [name] [args?]   Refreshes/downloads archive with optional config
-  view [name?]             Launches offline archive viewer website
-  report [name]            Provides a report on the most interesting changes
+  new [name] [url/uid]          Creates new archive with name and channel url or UID
+  refresh [name] [args?]        Refreshes/downloads archive with optional config
+  view [name?]                  Launches offline archive viewer website
+  report [name]                 Provides a report on the most interesting changes
 
 Example:
   $ bilark new vtuber https://space.bilibili.com/12345678/video
   $ bilark new vtuber 12345678
   $ bilark refresh vtuber
-  $ bilark view vtuber"""
+  $ bilark refresh vtuber --cookies=~/cookies.txt
+  $ bilark view vtuber
+
+Tip (error 352 / Bot detection):
+  Bilibili may block requests without login cookies.
+  Export your browser cookies as cookies.txt (Netscape format) and use:
+    $ bilark refresh vtuber --cookies=/path/to/cookies.txt
+  Or set the environment variable permanently:
+    $ export BILIBILI_COOKIES=/path/to/cookies.txt"""
 
 
 def _cli():
@@ -38,7 +47,7 @@ def _cli():
         print(HELP)
 
     elif args[0] in ["-v", "-ver", "--version", "--v"]:
-        print("1.0.0")
+        print("1.1.0")
 
     elif args[0] == "new":
         if len(args) == 2 and args[1] == "--help":
@@ -60,10 +69,13 @@ Arguments:
   --skip-metadata       Skips downloading metadata
   --skip-download       Skips downloading content
   --format=[str]        Downloads using custom yt-dlp format
+  --cookies=[path]      Path to Netscape cookies.txt for login
+                        (also reads BILIBILI_COOKIES env var)
 
 Example:
   $ bilark refresh vtuber
   $ bilark refresh vtuber --videos=10
+  $ bilark refresh vtuber --cookies=~/cookies.txt
   $ bilark refresh vtuber --skip-download""")
             sys.exit(0)
 
@@ -73,7 +85,7 @@ Example:
 
         config = DownloadConfig()
         if len(args) > 2:
-            def parse_value(arg): return arg.split("=")[1]
+            def parse_value(arg): return arg.split("=", 1)[1]
             def parse_int(arg):
                 v = parse_value(arg)
                 try: return int(v)
@@ -90,11 +102,27 @@ Example:
                     config.skip_download = True
                 elif config_arg.startswith("--format="):
                     config.format = parse_value(config_arg)
+                elif config_arg.startswith("--cookies="):
+                    cookie_path = os.path.expanduser(parse_value(config_arg))
+                    if not os.path.exists(cookie_path):
+                        _err_msg(f"Cookie file not found: {cookie_path}")
+                        sys.exit(1)
+                    os.environ["BILIBILI_COOKIES"] = cookie_path
+                    print(Fore.CYAN + f"  Using cookies: {cookie_path}" + Fore.RESET)
                 else:
                     _err_msg(f"Unknown configuration '{config_arg}'")
                     sys.exit(1)
 
         config.submit()
+
+        # Show cookie status
+        cookie_env = os.environ.get("BILIBILI_COOKIES")
+        if not cookie_env:
+            print(
+                Fore.YELLOW
+                + "  Tip: If you get error 352, use --cookies=/path/to/cookies.txt"
+                + Fore.RESET
+            )
 
         try:
             channel = Channel.load(args[1])

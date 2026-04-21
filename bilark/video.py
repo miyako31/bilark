@@ -27,24 +27,57 @@ class Video:
     thumbnail: "Element"
     deleted: "Element"
     notes: list
+    parts: int  # Number of 分P parts (1 for single-part)
+    part_titles: list  # Title of each part (empty list for single-part)
 
     @staticmethod
     def new(entry: dict, channel) -> "Video":
-        """Create new video from yt-dlp metadata entry"""
+        """Create new video from yt-dlp metadata entry.
+
+        Handles both single-part and multi-part (分P) Bilibili videos.
+        For multi-part, entry may be a playlist dict with sub-entries.
+        """
         video = Video()
         video.channel = channel
-        video.id = entry["id"]
-        video.uploaded = _decode_date(entry.get("upload_date") or entry.get("timestamp") or "19700101")
-        video.width = entry.get("width") or 0
-        video.height = entry.get("height") or 0
-        video.title = Element.new(video, entry.get("title", ""))
-        video.description = Element.new(video, entry.get("description", ""))
-        video.views = Element.new(video, entry.get("view_count"))
-        video.likes = Element.new(video, entry.get("like_count"))
-        video.thumbnail = Element.new(video, Thumbnail.new(entry.get("thumbnail", ""), video))
-        video.deleted = Element.new(video, False)
         video.notes = []
         video.known_not_deleted = True
+
+        # Multi-part (分P): yt-dlp returns a playlist-type entry
+        if entry.get("_type") == "playlist" and entry.get("entries"):
+            sub = entry["entries"]
+            first = sub[0] if sub else entry
+            video.id = entry.get("id") or first.get("id", "")
+            video.uploaded = _decode_date(
+                entry.get("upload_date") or first.get("upload_date") or "19700101"
+            )
+            video.width = first.get("width") or 0
+            video.height = first.get("height") or 0
+            video.title = Element.new(video, entry.get("title") or first.get("title", ""))
+            video.description = Element.new(video, entry.get("description") or first.get("description", ""))
+            video.views = Element.new(video, entry.get("view_count") or first.get("view_count"))
+            video.likes = Element.new(video, entry.get("like_count") or first.get("like_count"))
+            thumb_url = entry.get("thumbnail") or first.get("thumbnail", "")
+            video.thumbnail = Element.new(video, Thumbnail.new(thumb_url, video))
+            video.parts = len(sub)
+            video.part_titles = [e.get("title", f"Part {i+1}") for i, e in enumerate(sub)]
+        else:
+            # Single-part
+            video.id = entry.get("id", "")
+            video.uploaded = _decode_date(
+                entry.get("upload_date") or str(entry.get("timestamp", "19700101"))
+            )
+            video.width = entry.get("width") or 0
+            video.height = entry.get("height") or 0
+            video.title = Element.new(video, entry.get("title", ""))
+            video.description = Element.new(video, entry.get("description", ""))
+            video.views = Element.new(video, entry.get("view_count"))
+            video.likes = Element.new(video, entry.get("like_count"))
+            thumb_url = entry.get("thumbnail", "")
+            video.thumbnail = Element.new(video, Thumbnail.new(thumb_url, video))
+            video.parts = 1
+            video.part_titles = []
+
+        video.deleted = Element.new(video, False)
         return video
 
     @staticmethod
@@ -53,38 +86,82 @@ class Video:
         fake_entry = {
             "id": "BV00000000000",
             "upload_date": "19700101",
-            "width": 0,
-            "height": 0,
-            "title": "",
-            "description": "",
-            "view_count": 0,
-            "like_count": 0,
-            "thumbnail": "",
-            "formats": [],
+            "width": 0, "height": 0,
+            "title": "", "description": "",
+            "view_count": 0, "like_count": 0,
+            "thumbnail": "", "formats": [],
         }
         return Video.new(fake_entry, Channel._new_empty())
 
     def update(self, entry: dict):
         """Updates video using fresh metadata"""
-        self.title.update("title", entry.get("title", ""))
-        self.description.update("description", entry.get("description", ""))
-        self.views.update("view count", entry.get("view_count"))
-        self.likes.update("like count", entry.get("like_count"))
-        if entry.get("thumbnail"):
-            self.thumbnail.update("thumbnail", Thumbnail.new(entry["thumbnail"], self))
+        if entry.get("_type") == "playlist" and entry.get("entries"):
+            sub = entry["entries"]
+            first = sub[0] if sub else entry
+            self.title.update("title", entry.get("title") or first.get("title", ""))
+            self.description.update("description", entry.get("description") or first.get("description", ""))
+            self.views.update("view count", entry.get("view_count") or first.get("view_count"))
+            self.likes.update("like count", entry.get("like_count") or first.get("like_count"))
+            thumb = entry.get("thumbnail") or first.get("thumbnail", "")
+            self.parts = len(sub)
+            self.part_titles = [e.get("title", f"Part {i+1}") for i, e in enumerate(sub)]
+        else:
+            self.title.update("title", entry.get("title", ""))
+            self.description.update("description", entry.get("description", ""))
+            self.views.update("view count", entry.get("view_count"))
+            self.likes.update("like count", entry.get("like_count"))
+            thumb = entry.get("thumbnail", "")
+            self.parts = 1
+            self.part_titles = []
+
+        if thumb:
+            self.thumbnail.update("thumbnail", Thumbnail.new(thumb, self))
         self.deleted.update("undeleted", False)
         self.known_not_deleted = True
 
+    def filenames(self) -> list[str]:
+        """Returns list of downloaded filenames for this video.
+
+        yt-dlp names Bilibili multi-part files as:
+          Single-part: BV1xxx.mp4
+          Multi-part:  BV1xxx_p1.mp4, BV1xxx_p2.mp4, ...
+
+        We match the video id exactly (single) or id + '_p' + digits (multi).
+        """
+        videos_dir = self.channel.path / "videos"
+        found = []
+        for file in videos_dir.iterdir():
+            if file.suffix == ".part":
+                continue
+            stem = file.stem
+            if stem == self.id:
+                # exact match = single-part
+                found.append(file.name)
+            elif stem.startswith(self.id + "_p"):
+                # multi-part: BV1xxx_p1, BV1xxx_p2 ...
+                rest = stem[len(self.id) + 2:]  # after "_p"
+                if rest.isdigit():
+                    found.append(file.name)
+        return sorted(found)
+
     def filename(self) -> Optional[str]:
-        """Returns the filename for the downloaded video, if any"""
-        videos = self.channel.path / "videos"
-        for file in videos.iterdir():
-            if file.stem == self.id and file.suffix != ".part":
-                return file.name
-        return None
+        """Returns the first filename, for backwards compatibility with viewer."""
+        files = self.filenames()
+        return files[0] if files else None
 
     def downloaded(self) -> bool:
-        return self.filename() is not None
+        """Returns True if all expected parts are downloaded.
+        
+        For multi-part videos, checks that at least `parts` files exist.
+        For single-part, checks that at least 1 file exists.
+        """
+        files = self.filenames()
+        if not files:
+            return False
+        # If we know the part count, verify all parts present
+        if self.parts > 1:
+            return len(files) >= self.parts
+        return True
 
     def updated(self) -> bool:
         return (
@@ -118,6 +195,8 @@ class Video:
         video.thumbnail = Thumbnail._from_element(encoded["thumbnail"], video)
         video.notes = [Note._from_dict(video, n) for n in encoded["notes"]]
         video.deleted = Element._from_dict(encoded["deleted"], video)
+        video.parts = encoded.get("parts", 1)
+        video.part_titles = encoded.get("part_titles", [])
         video.known_not_deleted = False
         return video
 
@@ -134,6 +213,8 @@ class Video:
             "thumbnail": self.thumbnail._to_dict(),
             "deleted": self.deleted._to_dict(),
             "notes": [note._to_dict() for note in self.notes],
+            "parts": self.parts,
+            "part_titles": self.part_titles,
         }
 
     def __repr__(self) -> str:
@@ -143,7 +224,8 @@ class Video:
         width = self.width if self.width else "?"
         height = self.height if self.height else "?"
         uploaded = _encode_date_human(self.uploaded)
-        return f"{title}  🔎{views} │ 👍{likes} │ 📅{uploaded} │ 📺{width}x{height}"
+        parts_str = f" │ 📂{self.parts}p" if self.parts > 1 else ""
+        return f"{title}  🔎{views} │ 👍{likes} │ 📅{uploaded} │ 📺{width}x{height}{parts_str}"
 
     def __lt__(self, other) -> bool:
         return self.uploaded < other.uploaded
@@ -151,11 +233,13 @@ class Video:
 
 def _decode_date(input: str) -> datetime:
     """Decodes date string like '20180915' or Unix timestamp"""
+    if not input:
+        return datetime(1970, 1, 1)
     try:
-        if len(input) == 8 and input.isdigit():
-            return datetime.strptime(input, "%Y%m%d")
-        # Try as integer timestamp
-        return datetime.utcfromtimestamp(int(input))
+        s = str(input).strip()
+        if len(s) == 8 and s.isdigit():
+            return datetime.strptime(s, "%Y%m%d")
+        return datetime.utcfromtimestamp(int(float(s)))
     except Exception:
         return datetime(1970, 1, 1)
 
@@ -165,16 +249,11 @@ def _encode_date_human(input: datetime) -> str:
 
 
 def _magnitude(count: Optional[int] = None) -> str:
-    if count is None:
-        return "?"
-    elif count < 1000:
-        return str(count)
-    elif count < 1_000_000:
-        return f"{count/1000:.1f}k"
-    elif count < 1_000_000_000:
-        return f"{count/1_000_000:.1f}m"
-    else:
-        return f"{count/1_000_000_000:.1f}b"
+    if count is None: return "?"
+    elif count < 1000: return str(count)
+    elif count < 1_000_000: return f"{count/1000:.1f}k"
+    elif count < 1_000_000_000: return f"{count/1_000_000:.1f}m"
+    else: return f"{count/1_000_000_000:.1f}b"
 
 
 class Element:

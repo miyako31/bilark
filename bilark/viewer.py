@@ -52,7 +52,8 @@ def video(n, id):
             views_data = json.dumps(vid.views._to_dict())
             likes_data = json.dumps(vid.likes._to_dict())
             return render_template("video.html", title=title, name=n, video=vid,
-                                   views_data=views_data, likes_data=likes_data)
+                                   views_data=views_data, likes_data=likes_data,
+                                   filenames=vid.filenames())
 
         elif request.method == "POST":
             new = request.get_json()
