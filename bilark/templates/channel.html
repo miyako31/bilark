@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block styling %}
+<style>
+    #content {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .video {
+        display: flex;
+        flex-direction: column;
+        margin: 0.75rem;
+    }
+
+    .video-locked {
+        cursor: default;
+    }
+
+    .thumbnail {
+        overflow: hidden;
+        box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.25);
+        border-radius: 7.5px;
+        width: 300px;
+        height: 168.75px;
+    }
+
+    .thumbnail>img {
+        width: 100%;
+        height: 100%;
+    }
+
+    .info {
+        display: flex;
+        justify-content: space-between;
+        width: 300px;
+    }
+
+    .info>p {
+        margin-top: 0.5rem;
+    }
+
+    .title {
+        max-width: 225px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .uploaded {
+        padding-top: 0.12rem;
+        font-size: 0.7rem;
+        width: 8rem;
+        text-align: right;
+    }
+
+    .frost {
+        filter: blur(5px);
+        opacity: 0.4;
+        margin-top: -5px;
+    }
+
+
+    @media (prefers-color-scheme: dark) {
+        .thumbnail {
+            box-shadow: 0px 0px 10px 5px rgba(0, 0, 0, 0.225);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="hero">{{ name }}</h1>
+{% if channel.videos %}
+<div id="content">
+    {% for video in channel.videos %}
+    <!-- FIXME: ugly way to disable undownloaded video -->
+    {% set downloaded = video.downloaded() %}
+    {% if downloaded %}
+    <a href="{{ url_for('routes.video', n=name, id=video.id) }}" class="video">
+    {% else %}
+    <div class="video">
+    {% endif %}
+        <!-- Thumbnail -->
+        <div class="thumbnail">
+            <img src="{{ url_for('routes.archive_thumbnail', n=name, id=video.thumbnail.current().id) }}" {% if not
+                video.downloaded() %}class="frost" {% endif %} />
+        </div>
+        <!-- Information -->
+        <div class="info">
+            <!-- Title -->
+            <p class="title">{{ video.title.current() }}</p>
+            <p class="uploaded">
+                <!-- Updated -->
+                {% if video.updated() %}🌀 {% endif %}
+                <!-- Uploaded -->
+                {{ video.uploaded.strftime("%d/%m/%Y") }}
+            </p>
+        </div>
+    {% if downloaded %}
+    </a>
+    {% else %}
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% else %}
+<p style="text-align: center;">No videos found!</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function setCookie(name, value, days) {
+        var expires = "";
+        if (days) {
+            var date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            expires = "; expires=" + date.toUTCString();
+        }
+        document.cookie = name + "=" + (value || "") + expires + "; path=/";
+    }
+
+    function getCookie(name) {
+        var nameEQ = name + "=";
+        var ca = document.cookie.split(';');
+        for (var i = 0; i < ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    }
+
+    const visitedCookie = getCookie("visited")
+    const id = document.getElementsByClassName("hero")[0].innerHTML.split("'s")[0]
+    if (visitedCookie == null) {
+        setCookie("visited", JSON.stringify([id]))
+    } else {
+        const existingVisited = JSON.parse(visitedCookie)
+        let cleaned = []
+        existingVisited.forEach(channelId => {
+            if (channelId != id) {
+                cleaned.push(channelId)
+            }
+        });
+        cleaned.push(id)
+        setCookie("visited", JSON.stringify(cleaned))
+    }
+</script>
+{% endblock %}

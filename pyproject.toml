@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "bilark"
+version = "1.0.0"
+description = "Bilibili archiving made simple"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "bilark"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+yt-dlp = "*"
+flask = "*"
+colorama = "*"
+requests = "*"
+progress = "*"
+
+[tool.poetry.scripts]
+bilark = "bilark.cli:_cli"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
