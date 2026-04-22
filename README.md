@@ -1,73 +1,112 @@
 # Bilark
 
-**Bilibili archiving made simple** — a fork of [yark](https://github.com/Owez/yark) adapted for Bilibili.
+**Bilibili archiving made simple** — a fork of [yark](https://github.com/Owez/yark) adapted for Bilibili (哔哩哔哩).
 
-Bilark lets you archive a Bilibili user's video uploads, track metadata changes over time (titles, descriptions, view counts, likes), and browse your archive through a built-in web viewer — just like yark does for YouTube.
+---
 
-## Features
+## ⚠️ Important Disclaimers
 
-- Archive an entire Bilibili channel's video library
-- Track changes to titles, descriptions, views, likes over time
-- Built-in offline web viewer with video playback
-- Add timestamped notes to any video
-- Incremental refresh (only downloads new/changed content)
+**This software was entirely vibe-coded by [Claude Sonnet 4.6](https://www.anthropic.com/claude).**
+No human code review, test design, or quality assurance of any kind has been performed.
+
+- **No warranty is provided.** Bugs, data loss, and unexpected behaviour may occur at any time.
+- **The author and Claude accept no responsibility whatsoever for any damage or loss** resulting from the use of this software. Use entirely at your own risk.
+- **This project's only connection to yark is code derivation.** It has no affiliation with, endorsement from, or support from the yark authors or contributors.
+- Please comply with Bilibili's Terms of Service. Downloaded content should be used for personal viewing purposes only. Respect copyright.
+
+---
+
+## Overview
+
+Bilark automatically archives a Bilibili channel's video library and lets you browse it offline through a built-in web viewer.
+
+- Archive all videos from a Bilibili channel
+- Track changes to titles, descriptions, view counts, and like counts over time
+- Full support for multi-part (分P) videos
+- Built-in offline web viewer with in-browser playback and part-switching UI
+- Incremental refresh — only downloads new content
 - Powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+
+---
 
 ## Installation
 
 ```bash
+# Install dependencies (ffmpeg is also required — install via your system package manager)
 pip install yt-dlp flask colorama requests progress
-git clone https://github.com/your-fork/bilark
+
+# Install bilark
+git clone https://github.com/miyako31/bilark
 cd bilark
 pip install -e .
 ```
 
+---
+
 ## Usage
 
 ```bash
-# Create a new archive (use UID or full URL)
+# Create a new archive (accepts UID or full URL)
 bilark new vtuber 12345678
 bilark new vtuber https://space.bilibili.com/12345678/video
 
-# Refresh (download metadata + new videos)
+# Refresh metadata and download new videos
 bilark refresh vtuber
 
 # Refresh with options
-bilark refresh vtuber --videos=10       # limit to 10 most recent
-bilark refresh vtuber --skip-download   # metadata only
-bilark refresh vtuber --skip-metadata   # download only
+bilark refresh vtuber --videos=10              # limit to 10 most recent
+bilark refresh vtuber --skip-download          # metadata only
+bilark refresh vtuber --cookies=~/cookies.txt  # pass login cookies
 
-# Launch the web viewer
+# Launch the offline web viewer (opens browser automatically)
 bilark view vtuber
 
 # Print a change report
 bilark report vtuber
 ```
 
-## Archive format
+---
 
-Archives are stored as a directory:
+## Dealing with Error 352 (Bot Detection)
+
+Bilibili may block unauthenticated requests. Passing your browser cookies resolves this.
+
+1. Export your cookies as `cookies.txt` (Netscape format) using a browser extension such as *Get cookies.txt LOCALLY* for Chrome.
+2. Pass them to bilark in one of two ways:
+
+```bash
+# Per-command
+bilark refresh vtuber --cookies=/path/to/cookies.txt
+
+# Permanently via environment variable (add to .bashrc / .zshrc)
+export BILIBILI_COOKIES=/path/to/cookies.txt
+```
+
+---
+
+## Archive Structure
 
 ```
 vtuber/
-  bilark.json        # Archive metadata (version, url, video list)
-  bilark.bak         # Automatic backup of previous bilark.json
-  videos/            # Downloaded video files (named by BV ID)
-  thumbnails/        # Downloaded thumbnail images
+├── bilark.json       ← Archive metadata (version, URL, video list)
+├── bilark.bak        ← Automatic backup of the previous bilark.json
+├── videos/           ← Downloaded video files
+│   ├── BV1xxx.mp4
+│   ├── BV1yyy_p1.mp4   ← multi-part video
+│   └── BV1yyy_p2.mp4
+└── thumbnails/       ← Thumbnail images
 ```
 
-## Differences from yark
-
-| Feature | yark | bilark |
-|---|---|---|
-| Platform | YouTube | Bilibili |
-| Video categories | videos / shorts / livestreams | videos only |
-| Video URL | `youtube.com/watch?v=...` | `bilibili.com/video/BV...` |
-| Archive file | `yark.json` | `bilark.json` |
-| Channel input | YouTube channel URL | Bilibili space URL or UID |
+---
 
 ## Notes
 
-- Some Bilibili videos (premium, region-locked) may not be downloadable without cookies.  
-  Pass cookies via yt-dlp's `--cookies` mechanism or by setting `YTDL_OPTIONS` if wrapping.
-- Bilibili separates audio and video streams (DASH), so ffmpeg is required for merging.
+- **ffmpeg is required.** Bilibili uses DASH streaming (separate video and audio streams); ffmpeg merges them.
+- Keep yt-dlp up to date: `pip install -U yt-dlp`
+- Premium and region-locked content requires valid login cookies.
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
