@@ -47,7 +47,7 @@ def _cli():
         print(HELP)
 
     elif args[0] in ["-v", "-ver", "--version", "--v"]:
-        print("1.1.0")
+        print("1.1.1")
 
     elif args[0] == "new":
         if len(args) == 2 and args[1] == "--help":

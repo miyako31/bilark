@@ -14,6 +14,23 @@ if TYPE_CHECKING:
     from .channel import Channel
 
 
+
+def _strip_part_title(parent_title: str, part_title: str) -> str:
+    """Extract a clean short title for a part.
+
+    yt-dlp returns part titles as "{parent} p{NN} {subtitle}".
+    We strip the parent prefix and the pNN marker, returning only the subtitle.
+    """
+    import re as _re
+    s = part_title.strip()
+    if parent_title:
+        pt = parent_title.strip()
+        if s.startswith(pt):
+            s = s[len(pt):].strip()
+    s = _re.sub(r'^p[0-9]+\s*', '', s).strip()
+    return s if s else part_title.strip()
+
+
 class Video:
     channel: "Channel"
     id: str
@@ -59,7 +76,7 @@ class Video:
             thumb_url = entry.get("thumbnail") or first.get("thumbnail", "")
             video.thumbnail = Element.new(video, Thumbnail.new(thumb_url, video))
             video.parts = len(sub)
-            video.part_titles = [e.get("title", f"Part {i+1}") for i, e in enumerate(sub)]
+            video.part_titles = [_strip_part_title(entry.get("title", ""), e.get("title", f"Part {i+1}")) for i, e in enumerate(sub)]
         else:
             # Single-part
             video.id = entry.get("id", "")
@@ -104,7 +121,7 @@ class Video:
             self.likes.update("like count", entry.get("like_count") or first.get("like_count"))
             thumb = entry.get("thumbnail") or first.get("thumbnail", "")
             self.parts = len(sub)
-            self.part_titles = [e.get("title", f"Part {i+1}") for i, e in enumerate(sub)]
+            self.part_titles = [_strip_part_title(entry.get("title", ""), e.get("title", f"Part {i+1}")) for i, e in enumerate(sub)]
         else:
             self.title.update("title", entry.get("title", ""))
             self.description.update("description", entry.get("description", ""))

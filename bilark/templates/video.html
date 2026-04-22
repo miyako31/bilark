@@ -44,6 +44,139 @@
         margin-bottom: 0.65rem;
     }
 
+    /* Single-part: video same width as before */
+    #video-wrapper:not(.multi) video {
+        margin-top: 8vh;
+        width: 60vw;
+    }
+
+    /* Multi-part: flex row layout */
+    #video-wrapper.multi {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        margin-top: 8vh;
+        gap: 0;
+        width: calc(60vw + 260px);
+    }
+
+    #video-wrapper.multi video {
+        width: 60vw;
+        flex-shrink: 0;
+        margin-top: 0;
+        border-radius: 0.75rem 0 0 0.75rem;
+    }
+
+    /* Desktop part list sidebar */
+    #part-list {
+        width: 260px;
+        max-height: 60vh;
+        overflow-y: auto;
+        border: 1px solid rgba(0,0,0,0.12);
+        border-left: none;
+        border-radius: 0 0.75rem 0.75rem 0;
+        background: white;
+        flex-shrink: 0;
+    }
+
+    #part-list-label {
+        font-size: 0.75rem;
+        color: #999;
+        margin: 0.6rem 0.8rem 0.3rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .part-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.55rem 0.8rem;
+        cursor: pointer;
+        border-left: 3px solid transparent;
+        transition: background 0.15s;
+        font-size: 0.82rem;
+        line-height: 1.35rem;
+    }
+
+    .part-item:hover {
+        background: rgba(0,0,0,0.04);
+    }
+
+    .part-item.active {
+        border-left-color: #098fb4;
+        background: rgba(9,143,180,0.07);
+        font-weight: bold;
+    }
+
+    .part-num {
+        color: #098fb4;
+        font-weight: bold;
+        min-width: 1.4rem;
+        flex-shrink: 0;
+    }
+
+    .part-title {
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    /* Mobile dropdown (hidden on desktop) */
+    #part-dropdown-wrap {
+        display: none;
+    }
+
+    /* Responsive: mobile */
+    @media screen and (max-width: 850px) {
+        #video-wrapper:not(.multi) video {
+            width: 80vw;
+        }
+
+        #video-wrapper.multi {
+            flex-direction: column;
+            width: 80vw;
+            margin-top: 4vh;
+            gap: 0.5rem;
+        }
+
+        #video-wrapper.multi video {
+            width: 80vw;
+            border-radius: 0.75rem;
+        }
+
+        /* Hide desktop sidebar on mobile */
+        #part-list {
+            display: none;
+        }
+
+        /* Show dropdown on mobile */
+        #part-dropdown-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            width: 80vw;
+        }
+
+        #part-dropdown-label {
+            font-size: 0.82rem;
+            color: #7f7f7f;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        #part-dropdown {
+            flex: 1;
+            padding: 0.4rem 0.5rem;
+            border-radius: 0.4rem;
+            border: 1px solid rgba(0,0,0,0.20);
+            background: white;
+            font-size: 0.82rem;
+        }
+    }
+
     video,
     h1,
     #description,
@@ -157,15 +290,102 @@
         .top>.timestamp {
             color: #397fab;
         }
+
+        #part-list {
+            background: rgb(30, 29, 32);
+            border-color: rgba(255,255,255,0.10);
+        }
+
+        .part-item:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        .part-item.active {
+            background: rgba(9,143,180,0.15);
+        }
+
+        #part-dropdown {
+            background: rgb(30, 29, 32);
+            color: rgb(220, 220, 220);
+            border-color: rgba(255,255,255,0.15);
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div id="content">
-    <!-- Video -->
-    <video src="{{ url_for('routes.archive_video', n=name, file=video.filename()) }}" id="player" autoplay
-        controls></video>
+    <!-- Video Player (分P対応) -->
+    {% set files = video.filenames() %}
+    {% set is_multi = files|length > 1 %}
+    <div id="video-wrapper" class="{% if is_multi %}multi{% endif %}">
+        {% if is_multi %}
+        <!-- Desktop: sidebar list / Mobile: dropdown -->
+        <!-- Mobile dropdown (hidden on desktop) -->
+        <div id="part-dropdown-wrap">
+            <label for="part-dropdown" id="part-dropdown-label">パート / Part</label>
+            <select id="part-dropdown" onchange="switchPartByIndex(this.value)">
+                {% for f in files %}
+                <option value="{{ loop.index0 }}">
+                    {% if video.part_titles and video.part_titles|length >= loop.index %}
+                        {{ video.part_titles[loop.index0] }}
+                    {% else %}
+                        Part {{ loop.index }}
+                    {% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <!-- Video element -->
+        <video src="{{ url_for('routes.archive_video', n=name, file=files[0]) }}"
+               id="player" autoplay controls></video>
+        <!-- Desktop sidebar list (hidden on mobile) -->
+        <div id="part-list">
+            <p id="part-list-label">パート / Parts</p>
+            {% for f in files %}
+            {% set pt = video.part_titles[loop.index0] if (video.part_titles and video.part_titles|length >= loop.index) else ("Part " ~ loop.index) %}
+            <div class="part-item {% if loop.first %}active{% endif %}"
+                 onclick="switchPartByIndex({{ loop.index0 }})"
+                 data-index="{{ loop.index0 }}"
+                 data-src="{{ url_for('routes.archive_video', n=name, file=f) }}"
+                 title="{{ pt }}">
+                <span class="part-num">{{ loop.index }}</span>
+                <span class="part-title">{{ pt }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <video src="{{ url_for('routes.archive_video', n=name, file=video.filename()) }}"
+               id="player" autoplay controls></video>
+        {% endif %}
+    </div>
+    {% if is_multi %}
+    <script>
+        // All part sources as an array
+        const partSrcs = [
+            {% for f in files %}
+            "{{ url_for('routes.archive_video', n=name, file=f) }}"{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        function switchPartByIndex(idx) {
+            idx = parseInt(idx);
+            const player = document.getElementById('player');
+            const wasPlaying = !player.paused;
+            player.src = partSrcs[idx];
+            if (wasPlaying) player.play();
+
+            // Update sidebar active state
+            document.querySelectorAll('.part-item').forEach((el, i) => {
+                el.classList.toggle('active', i === idx);
+            });
+
+            // Sync dropdown
+            const dd = document.getElementById('part-dropdown');
+            if (dd) dd.value = idx;
+        }
+    </script>
+    {% endif %}
     <!-- Information -->
     <h1 title="Title of the video">{{ video.title.current() }}</h1>
     <div class="info">
